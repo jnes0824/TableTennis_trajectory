@@ -5,6 +5,11 @@ import numpy as np
 
 class TableTennisScene:
     def __init__(self):
+        #log angular velocity
+        self.log_angular_velocity = False
+        self.start_time = None
+        self.is_contacting = False  # 添加接觸標記
+
         # 初始化物理引擎
         self.physicsClient = p.connect(p.GUI)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -24,7 +29,7 @@ class TableTennisScene:
         
         # 球的參數
         self.ball_radius = 0.02  # 40mm直徑
-        self.ball_mass = 0.0027  # 2.7g
+        self.ball_mass = 0.01  
         
         # 創建場景
         self.create_scene()
@@ -66,10 +71,13 @@ class TableTennisScene:
         
         # 設置桌面的物理參數
         p.changeDynamics(self.table_id, -1, 
-                        lateralFriction=0.3,  # 側向摩擦係數
-                        restitution=0.8,      # 彈性係數
-                        rollingFriction=0.1,  # 滾動摩擦係數
-                        spinningFriction=0.1) # 旋轉摩擦係數
+                        lateralFriction=0.45,  # 側向摩擦係數
+                        restitution=0.9,      # 彈性係數
+                        rollingFriction=0,   # 滾動摩擦係數
+                        spinningFriction=0,  # 降低旋轉摩擦係數
+                        contactStiffness=1000,
+                        contactDamping=10)
+                        
         
         # 創建球網
         net_collision = p.createCollisionShape(
@@ -135,18 +143,21 @@ class TableTennisScene:
         
         # 設置球的物理參數
         p.changeDynamics(self.ball_id, -1,
-                        lateralFriction=0.1,   # 側向摩擦係數
-                        restitution=0.8,       # 彈性係數
-                        rollingFriction=0.1,   # 滾動摩擦係數
-                        spinningFriction=0.1,  # 旋轉摩擦係數
-                        linearDamping=0.1,     # 線性阻尼
-                        angularDamping=0.1)    # 角阻尼
+                        lateralFriction=0.0,     # 移除側向摩擦
+                        restitution=0.9,        # 保持彈性係數
+                        rollingFriction=0.001,    # 移除滾動摩擦
+                        spinningFriction=0.001,   # 移除旋轉摩擦
+                        linearDamping=0.0,      # 移除線性阻尼
+                        angularDamping=0.0,     # 移除角阻尼
+                        contactStiffness=1000,  # 增加接觸剛度
+                        contactDamping=0.0      # 移除接觸阻尼
+                        )
         
         # 給球施加一個向前的力
         p.applyExternalForce(
             self.ball_id,
             -1,  # -1 表示作用於物體的中心
-            [-2.5, 0, -1.5],  # 力的大小和方向 (x, y, z)
+            [-10, 0, -6],  # 力的大小和方向 (x, y, z)
             start_pos,  # 力的作用點
             p.WORLD_FRAME  # 使用世界座標系
         )
@@ -194,16 +205,18 @@ class TableTennisScene:
         # 根據旋轉類型設置角速度
         if rotation_type == 1:
             # 上旋：繞 y 軸順時針旋轉
-            angular_vel = [0, 10, 0]
+            angular_vel = [0, 200, 0]  # 增加旋轉速度
         elif rotation_type == 2:
             # 下旋：繞 y 軸逆時針旋轉
-            angular_vel = [0, -10, 0]
+            angular_vel = [0, -500, 0]  # 增加旋轉速度
         elif rotation_type == 3:
             # 側旋：繞 z 軸旋轉
-            angular_vel = [0, 0, 10]
+            self.log_angular_velocity = True
+            self.start_time = time.time()
+            angular_vel = [0, 0, 300]  # 增加旋轉速度
         elif rotation_type == 4:
             # 混合旋轉
-            angular_vel = [5, 5, 5]
+            angular_vel = [200, 200, 200]  # 增加旋轉速度
             
         # 設置線速度和角速度
         p.resetBaseVelocity(self.ball_id, [0, 0, 0], angular_vel)
@@ -212,7 +225,7 @@ class TableTennisScene:
         p.applyExternalForce(
             self.ball_id,
             -1,
-            [-2.5, 0, -1.5],
+            [-10, 0, -6],
             start_pos,
             p.WORLD_FRAME
         )
@@ -230,7 +243,28 @@ class TableTennisScene:
         # 運行模擬
         for _ in range(10000):
             p.stepSimulation()
-            time.sleep(1./1000.)  # 模擬時間步長
+
+            # 印出角速度資訊（只印第一次上旋後的幾秒）
+            if self.log_angular_velocity and self.start_time:
+                now = time.time()
+                if now - self.start_time <= 3:  # 只印前 3 秒
+                    _, angular_vel = p.getBaseVelocity(self.ball_id)
+                    print(f"[{now - self.start_time:.2f}s] Angular velocity:", angular_vel)
+                else:
+                    self.log_angular_velocity = False
+                    self.start_time = None
+
+            ball_pos, _ = p.getBasePositionAndOrientation(self.ball_id)
+            # 檢查球是否接觸桌子（使用更寬鬆的條件）
+            if abs(ball_pos[2] - (self.table_height + self.ball_radius)) < 0.02:  # 增加容許誤差
+                if not self.is_contacting:  # 只在開始接觸時印出
+                    _, angular_vel = p.getBaseVelocity(self.ball_id)
+                    print(f"球接觸桌面 - 位置: {ball_pos}, 角速度: {angular_vel}")
+                    self.is_contacting = True
+            else:
+                self.is_contacting = False  # 重置接觸標記
+
+            time.sleep(1./240.)  # 模擬時間步長
             
             # 檢查按鍵
             keys = p.getKeyboardEvents()
@@ -242,6 +276,7 @@ class TableTennisScene:
                     elif key == ord('1'):
                         # 上旋
                         self.reset_simulation(1)
+                        self.is_contacting = False
                     elif key == ord('2'):
                         # 下旋
                         self.reset_simulation(2)
