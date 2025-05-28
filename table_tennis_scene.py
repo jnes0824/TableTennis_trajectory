@@ -34,7 +34,7 @@ class TableTennisScene:
         self.ball_mass = 0.01  
 
         # 初始發球力
-        self.launch_force = [-10, 0, -2]  
+        self.launch_force = [-8, 0, -2]  
         
         # 創建場景
         self.create_scene()
@@ -153,7 +153,7 @@ class TableTennisScene:
                         rollingFriction=0.001,    # 移除滾動摩擦
                         spinningFriction=0.001,   # 移除旋轉摩擦
                         linearDamping=0.01,      # 移除線性阻尼
-                        angularDamping=0.01,     # 移除角阻尼
+                        angularDamping=0.0,     # 移除角阻尼
                         contactStiffness=10000,  # 增加接觸剛度
                         contactDamping=100    # 移除接觸阻尼
                         )
@@ -181,10 +181,10 @@ class TableTennisScene:
             rgbaColor=[0.8, 0.8, 0.8, 1]
         )
         # 放置在桌子另一側，靠近球飛行軌跡
-        start_pos = [-self.table_length / 2 + 0.05, 0, self.table_height + 0.15]
+        start_pos = [-self.table_length / 2 + 0.05, 0, self.table_height + 0.17]
         start_orn = p.getQuaternionFromEuler([0, 0, 0])
         self.paddle_id = p.createMultiBody(
-            baseMass=0,
+            baseMass=0.08,
             baseCollisionShapeIndex=paddle_collision,
             baseVisualShapeIndex=paddle_visual,
             basePosition=start_pos,
@@ -193,7 +193,7 @@ class TableTennisScene:
         # 設置球拍的物理參數
         p.changeDynamics(self.paddle_id, -1, 
                          restitution=0.9, 
-                         lateralFriction=0.3,
+                         lateralFriction=1,
                          rollingFriction=0.005,
                          spinningFriction=0.005,)
         
