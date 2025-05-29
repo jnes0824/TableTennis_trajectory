@@ -11,6 +11,16 @@ class TableTennisScene:
         self.is_contacting = False  # 添加接觸標記
         self.ball_trajectory = []  # 用於儲存球的歷史位置
         self.prev_ball_pos = None  # 上一步球的位置，用於畫即時軌跡
+        self.hit_once = False  # 球拍碰撞標記
+
+        # 儲存所有即時軌跡線的 ID，方便重置時移除
+        self.debug_line_ids = []
+
+        # 球拍傾斜角（弧度），正值 = 向前傾
+        self.paddle_pitch = 0.0
+        # Magnus 力係數 (調大會讓彎曲更明顯)
+        self.magnus_coeff = 5e-6 
+        self.magnus_on = True # 是否啟用 Magnus 力
 
         # 初始化物理引擎
         self.physicsClient = p.connect(p.GUI)
@@ -81,7 +91,7 @@ class TableTennisScene:
                         rollingFriction=0,   # 滾動摩擦係數
                         spinningFriction=0,  # 降低旋轉摩擦係數
                         contactStiffness=2000,
-                        contactDamping=0)
+                        contactDamping=0.0)
                         
         
         # 創建球網
@@ -100,6 +110,15 @@ class TableTennisScene:
             baseCollisionShapeIndex=net_collision,
             baseVisualShapeIndex=net_visual,
             basePosition=[0, 0, self.table_height + self.net_height/2]
+        )
+
+        # 畫出桌面中線（白色，永久存在）
+        self.center_line_id = p.addUserDebugLine(
+            [-self.table_length / 2, 0, self.table_height + 0.021],
+            [ self.table_length / 2, 0, self.table_height + 0.021],
+            [1, 1, 1],  # 白色
+            2,          # 線寬
+            0           # lifeTime=0 => 永久
         )
         
     def create_ball(self):
@@ -153,9 +172,10 @@ class TableTennisScene:
                         rollingFriction=0.001,    # 移除滾動摩擦
                         spinningFriction=0.001,   # 移除旋轉摩擦
                         linearDamping=0.01,      # 移除線性阻尼
-                        angularDamping=0.0,     # 移除角阻尼
+                        angularDamping=0.0001,     # 移除角阻尼
                         contactStiffness=10000,  # 增加接觸剛度
-                        contactDamping=100    # 移除接觸阻尼
+                        contactDamping=100,    # 移除接觸阻尼
+                        maxJointVelocity=1000
                         )
         
         # 給球施加一個向前的力
@@ -169,7 +189,7 @@ class TableTennisScene:
         
     def create_paddle(self):
         # 創建球拍（改為大拍面、直立放在另一側）
-        paddle_half_extents = [0.01, 0.15, 0.15]  # 增大拍面，直立為 y-z 面方向
+        paddle_half_extents = [0.01, 0.25, 0.15]  # 增大拍面，直立為 y-z 面方向
         
         paddle_collision = p.createCollisionShape(
             p.GEOM_BOX,
@@ -181,8 +201,8 @@ class TableTennisScene:
             rgbaColor=[0.8, 0.8, 0.8, 1]
         )
         # 放置在桌子另一側，靠近球飛行軌跡
-        start_pos = [-self.table_length / 2 + 0.05, 0, self.table_height + 0.17]
-        start_orn = p.getQuaternionFromEuler([0, 0, 0])
+        start_pos = [-self.table_length / 4, 0, self.table_height + 0.17]
+        start_orn = p.getQuaternionFromEuler([0, self.paddle_pitch, 0])
         self.paddle_id = p.createMultiBody(
             baseMass=0.08,
             baseCollisionShapeIndex=paddle_collision,
@@ -190,16 +210,22 @@ class TableTennisScene:
             basePosition=start_pos,
             baseOrientation=start_orn
         )
+        self.paddle_base_pos = start_pos
         # 設置球拍的物理參數
         p.changeDynamics(self.paddle_id, -1, 
                          restitution=0.9, 
-                         lateralFriction=1,
-                         rollingFriction=0.005,
-                         spinningFriction=0.005,)
+                         lateralFriction=4,
+                         rollingFriction=2e-5,
+                         spinningFriction=2e-5,)
         
     def reset_simulation(self, rotation_type=None):
         # 清空上一段軌跡
         self.ball_trajectory.clear()
+        # 移除之前留下的紅色軌跡線
+        for line_id in self.debug_line_ids:
+            p.removeUserDebugItem(line_id)
+        self.debug_line_ids.clear()
+
         self.prev_ball_pos = None  # 清空上一段軌跡連接點
         # 重置球的位置和速度
         start_pos = [self.table_length / 2 - 0.02, 0, self.table_height + 0.3]
@@ -214,7 +240,7 @@ class TableTennisScene:
         # 根據旋轉類型設置角速度
         if rotation_type == 1:
             # 上旋：繞 y 軸順時針旋轉
-            angular_vel = [0, 200, 0]  # 增加旋轉速度
+            angular_vel = [0, 500, 0]  # 增加旋轉速度
         elif rotation_type == 2:
             # 下旋：繞 y 軸逆時針旋轉
             angular_vel = [0, -500, 0]  # 增加旋轉速度
@@ -222,10 +248,10 @@ class TableTennisScene:
             # 側旋：繞 z 軸旋轉
             self.log_angular_velocity = True
             self.start_time = time.time()
-            angular_vel = [0, 0, 300]  # 增加旋轉速度
+            angular_vel = [0, 0, 500]  # 增加旋轉速度
         elif rotation_type == 4:
             # 混合旋轉
-            angular_vel = [200, 200, 200]  # 增加旋轉速度
+            angular_vel = [0, 0, -500]  # 增加旋轉速度
             
         # 設置線速度和角速度
         p.resetBaseVelocity(self.ball_id, [0, 0, 0], angular_vel)
@@ -238,6 +264,8 @@ class TableTennisScene:
             start_pos,
             p.WORLD_FRAME
         )
+        self.paddle_pitch = 0.0
+        self._update_paddle_orientation()
         
     def update_camera(self):
         # 更新相機視角
@@ -255,9 +283,26 @@ class TableTennisScene:
 
             ball_pos, _ = p.getBasePositionAndOrientation(self.ball_id)
             self.ball_trajectory.append(ball_pos)   # 再紀錄更新後的位置
+            # ---------- 檢查是否碰到球拍 ----------
+            contact = p.getContactPoints(self.ball_id, self.paddle_id)
+            if contact and not self.hit_once:
+                if self.prev_ball_pos is not None:
+                    dy = ball_pos[1] - self.prev_ball_pos[1]   # 只看 y 分量
+                    print(f"撞擊瞬間側向位移 Δy = {dy:.4f} m")
+                self.hit_once = True
+            elif not contact:
+                self.hit_once = False
+            # ---------- 結束 ------------------------
+            # -------- Magnus force: F = k * (ω × v) --------
+            if self.magnus_on:
+                lin_vel, ang_vel = p.getBaseVelocity(self.ball_id)
+                magnus_force = self.magnus_coeff * np.cross(ang_vel, lin_vel)
+                p.applyExternalForce(self.ball_id, -1, magnus_force,
+                                    ball_pos, p.WORLD_FRAME)
             # 實時繪製紅色軌跡
             if self.prev_ball_pos is not None:
-                p.addUserDebugLine(self.prev_ball_pos, ball_pos, [1, 0, 0], 2, 0)  # lifeTime=0 => 永久
+                line_id = p.addUserDebugLine(self.prev_ball_pos, ball_pos, [1, 0, 0], 2, 0)  # lifeTime=0 => 永久
+                self.debug_line_ids.append(line_id)
             self.prev_ball_pos = ball_pos
             # paddle_pos, paddle_orn = p.getBasePositionAndOrientation(self.paddle_id)
             # target_x = ball_pos[0] - 0.05  # 讓球拍略提前迎擊
@@ -275,7 +320,7 @@ class TableTennisScene:
                     self.log_angular_velocity = False
                     self.start_time = None
 
-            print(f"球位置: {ball_pos}")
+            # print(f"球位置: {ball_pos}")
             # # 檢查球是否接觸桌子（使用更寬鬆的條件）
             # if abs(ball_pos[2] - (self.table_height + self.ball_radius)) < 0.02:  # 增加容許誤差
             #     if not self.is_contacting:  # 只在開始接觸時印出
@@ -307,6 +352,14 @@ class TableTennisScene:
                     elif key == ord('4'):
                         # 混合旋轉
                         self.reset_simulation(4)
+                    elif key == ord('z'):
+                        # 球拍向前傾 5°
+                        self.paddle_pitch = min(np.radians(60), self.paddle_pitch + np.radians(5))
+                        self._update_paddle_orientation()
+                    elif key == ord('x'):
+                        # 球拍向後仰 5°
+                        self.paddle_pitch = max(np.radians(-60), self.paddle_pitch - np.radians(5))
+                        self._update_paddle_orientation()
                     # 相機控制
                     elif key == ord('w'):  # 放大
                         self.camera_distance = max(0.5, self.camera_distance - 0.1)
@@ -330,6 +383,14 @@ class TableTennisScene:
         np.savetxt("ball_trajectory.csv", self.ball_trajectory, delimiter=",", header="x,y,z", comments='')
         print("已儲存球軌跡至 ball_trajectory.csv")
         
+    def _update_paddle_orientation(self):
+        """
+        依照 self.paddle_pitch 更新球拍姿態
+        """
+        quat = p.getQuaternionFromEuler([0, self.paddle_pitch, 0])
+        p.resetBasePositionAndOrientation(self.paddle_id,
+                                          self.paddle_base_pos, quat)
+
     def cleanup(self):
         p.disconnect()
 
