@@ -239,10 +239,10 @@ class TableTennisScene:
         
         # 根據旋轉類型設置角速度
         if rotation_type == 1:
-            # 上旋：繞 y 軸順時針旋轉
+            # 下旋：繞 y 軸順時針旋轉
             angular_vel = [0, 500, 0]  # 增加旋轉速度
         elif rotation_type == 2:
-            # 下旋：繞 y 軸逆時針旋轉
+            # 上旋：繞 y 軸逆時針旋轉
             angular_vel = [0, -500, 0]  # 增加旋轉速度
         elif rotation_type == 3:
             # 逆側旋：繞 z 軸旋轉
