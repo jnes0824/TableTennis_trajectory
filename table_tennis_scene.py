@@ -278,7 +278,7 @@ class TableTennisScene:
         
     def run_simulation(self):
         # 運行模擬
-        for _ in range(500):
+        for _ in range(300):
             p.stepSimulation()  # 先做物理步
 
             ball_pos, _ = p.getBasePositionAndOrientation(self.ball_id)
