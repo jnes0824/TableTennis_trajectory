@@ -245,12 +245,12 @@ class TableTennisScene:
             # 下旋：繞 y 軸逆時針旋轉
             angular_vel = [0, -500, 0]  # 增加旋轉速度
         elif rotation_type == 3:
-            # 側旋：繞 z 軸旋轉
+            # 逆側旋：繞 z 軸旋轉
             self.log_angular_velocity = True
             self.start_time = time.time()
             angular_vel = [0, 0, 500]  # 增加旋轉速度
         elif rotation_type == 4:
-            # 混合旋轉
+            # 側旋
             angular_vel = [0, 0, -500]  # 增加旋轉速度
             
         # 設置線速度和角速度
