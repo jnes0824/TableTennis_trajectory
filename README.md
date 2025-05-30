@@ -112,7 +112,9 @@ plot_traj.py                  # plot the trajectory
 
 ## 📷 Screenshots
 - press 3 (reverse side spin)
-![alt text](image-1.png)
+![alt text](./image/image.png)
+
+![alt text](./image/image_traj.pngimage.png)
 ---
 
 ## 📚 References
